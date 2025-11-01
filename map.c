@@ -2,107 +2,122 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ---------- Private string helpers ---------- */
+/* ---------- Private internal types ---------- */
+typedef struct MapEntry
+{
+    char *key;
+    int value;
+    struct MapEntry *next;
+    struct MapEntry *prev;
+} MapEntry;
 
-static int str_eq(const char *a, const char *b) {
-    while (*a && *b) {
-        if (*a != *b)
+typedef struct MapPriv
+{
+    MapEntry *head;
+    MapEntry *tail;
+    int count;
+} MapPriv;
+
+/* ---------- Private helper functions ---------- */
+static int str_eq(const char *a, const char *b)
+{
+    while (*a && *b)
+        if (*a++ != *b++)
             return 0;
-        a++;
-        b++;
-    }
-    return *a == *b;  // both must end at same time
+    return *a == *b;
 }
 
-static char *str_copy(const char *src) {
-    int len = 0;
-    while (src[len])
-        len++;
-
-    char *dst = malloc(len + 1);
-    if (!dst) return NULL;
-
-    for (int i = 0; i <= len; i++)
-        dst[i] = src[i];  // includes '\0'
-    return dst;
+static char *str_copy(const char *s)
+{
+    int n = 0;
+    while (s[n])
+        n++;
+    char *r = malloc(n + 1);
+    for (int i = 0; i <= n; i++)
+        r[i] = s[i];
+    return r;
 }
 
-/* ---------- Private helper ---------- */
-static MapEntry *__Map_find(struct Map *self, const char *key) {
-    for (MapEntry *cur = self->__head; cur != NULL; cur = cur->__next) {
+static MapEntry *find_entry(MapPriv *p, const char *key)
+{
+    for (MapEntry *cur = p->head; cur; cur = cur->next)
         if (str_eq(cur->key, key))
             return cur;
-    }
     return NULL;
 }
 
-/* ---------- Private methods ---------- */
-static void __Map_put(struct Map *self, char *key, int value) {
-    MapEntry *entry = __Map_find(self, key);
-    if (entry != NULL) {
-        entry->value = value; /* update existing */
+/* ---------- OOP-style methods ---------- */
+static void __Map_put(Map *self, char *key, int value)
+{
+    MapPriv *p = self->__priv;
+    MapEntry *e = find_entry(p, key);
+    if (e)
+    {
+        e->value = value;
         return;
     }
 
-    /* new entry */
-    MapEntry *new_entry = malloc(sizeof(MapEntry));
-    if (!new_entry) return;
+    MapEntry *ne = malloc(sizeof(*ne));
+    ne->key = str_copy(key);
+    ne->value = value;
+    ne->next = NULL;
+    ne->prev = p->tail;
 
-    new_entry->key = str_copy(key);
-    new_entry->value = value;
-    new_entry->__next = NULL;
-    new_entry->__prev = self->__tail;
-
-    if (self->__tail)
-        self->__tail->__next = new_entry;
+    if (p->tail)
+        p->tail->next = ne;
     else
-        self->__head = new_entry;
-
-    self->__tail = new_entry;
-    self->__count++;
+        p->head = ne;
+    p->tail = ne;
+    p->count++;
 }
 
-static int __Map_get(struct Map *self, char *key, int def) {
-    MapEntry *entry = __Map_find(self, key);
-    return entry ? entry->value : def;
+static int __Map_get(Map *self, char *key, int def)
+{
+    MapPriv *p = self->__priv;
+    MapEntry *e = find_entry(p, key);
+    return e ? e->value : def;
 }
 
-static int __Map_size(struct Map *self) {
-    return self->__count;
+static int __Map_size(Map *self)
+{
+    return ((MapPriv *)self->__priv)->count;
 }
 
-static void __Map_dump(struct Map *self) {
-    printf("Object map count=%d\n", self->__count);
-    for (MapEntry *cur = self->__head; cur != NULL; cur = cur->__next) {
+static void __Map_dump(Map *self)
+{
+    MapPriv *p = self->__priv;
+    printf("Object map count=%d\n", p->count);
+    for (MapEntry *cur = p->head; cur; cur = cur->next)
         printf("  %s=%d\n", cur->key, cur->value);
-    }
 }
 
-static void __Map_del(struct Map *self) {
-    MapEntry *cur = self->__head;
-    while (cur) {
-        MapEntry *next = cur->__next;
+static void __Map_del(Map *self)
+{
+    MapPriv *p = self->__priv;
+    MapEntry *cur = p->head;
+    while (cur)
+    {
+        MapEntry *next = cur->next;
         free(cur->key);
         free(cur);
         cur = next;
     }
+    free(p);
     free(self);
 }
 
-/* ---------- Public constructor ---------- */
-struct Map *Map_new(void) {
-    struct Map *p = malloc(sizeof(*p));
-    if (!p) return NULL;
+/* ---------- Constructor ---------- */
+Map *Map_new(void)
+{
+    Map *m = malloc(sizeof(*m));
+    MapPriv *priv = calloc(1, sizeof(*priv));
 
-    p->__head = NULL;
-    p->__tail = NULL;
-    p->__count = 0;
+    m->__priv = priv;
+    m->put = &__Map_put;
+    m->get = &__Map_get;
+    m->size = &__Map_size;
+    m->dump = &__Map_dump;
+    m->del = &__Map_del;
 
-    p->put  = &__Map_put;
-    p->get  = &__Map_get;
-    p->size = &__Map_size;
-    p->dump = &__Map_dump;
-    p->del  = &__Map_del;
-
-    return p;
+    return m;
 }

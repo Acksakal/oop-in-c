@@ -1,7 +1,8 @@
 #include "map.h"
 #include <stdio.h>
 
-int main(void) {
+int main(void)
+{
     struct Map *m = Map_new();
 
     m->put(m, "x", 42);
@@ -15,5 +16,6 @@ int main(void) {
     printf("Get z (default): %d\n", m->get(m, "z", -1));
 
     m->del(m);
+
     return 0;
 }
